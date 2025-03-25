@@ -40,6 +40,10 @@ yarn-error.log
 firebase-debug.log
 firebase-debug.*.log
 
+free_leetcode_questions.json
+
+
+
 # IDE
 .idea/
 .vscode/

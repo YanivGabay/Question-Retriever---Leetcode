@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read and write access to all questions
+    match /questions/{questionId} {
+      allow read, write: if true;
+    }
+    
+    // Allow read and write access to retrievedQuestions
+    match /retrievedQuestions/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
