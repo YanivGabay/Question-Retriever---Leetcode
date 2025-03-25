@@ -4,7 +4,6 @@ import { db } from './firebase/config';
 import { importQuestionsFromJSON } from './utils/importQuestions';
 import { 
   getRandomUnsentQuestionByDifficulty, 
-  markQuestionAsSent,
   getAllQuestions
 } from './services/questionService';
 import { Question } from './models/Question';

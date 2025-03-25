@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Question, TopicTag } from '../models/Question';
-import { RetrievedQuestion, createRetrievedQuestion } from '../models/RetrievedQuestion';
+import { createRetrievedQuestion } from '../models/RetrievedQuestion';
 
 // Collection references
 const questionsCol = collection(db, 'questions');
