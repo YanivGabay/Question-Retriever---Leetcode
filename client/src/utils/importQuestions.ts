@@ -1,4 +1,4 @@
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, writeBatch, doc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Question, LeetCodeQuestion, convertToQuestionModel } from '../models/Question';
 
@@ -6,7 +6,6 @@ import { Question, LeetCodeQuestion, convertToQuestionModel } from '../models/Qu
  * One-time utility to import questions from JSON file to Firestore
  * 
  * IMPORTANT: This should be run ONLY ONCE after setting up the application.
- * Running this multiple times may create duplicate entries if the logic changes.
  */
 export const importQuestionsFromJSON = async (jsonFilePath: string): Promise<number> => {
   try {
@@ -15,12 +14,8 @@ export const importQuestionsFromJSON = async (jsonFilePath: string): Promise<num
     // Check if we already have questions in the database
     const existingCheck = await getDocs(collection(db, 'questions'));
     if (existingCheck.size > 0) {
-      console.warn(`Database already contains ${existingCheck.size} questions. Be cautious about importing again.`);
-      
-      // Optional: Uncomment this to prevent accidental re-imports
-      // if (!window.confirm(`Database already contains ${existingCheck.size} questions. Are you SURE you want to continue importing?`)) {
-      //   return 0;
-      // }
+      console.warn(`Database already contains ${existingCheck.size} questions. Skipping import.`);
+      return existingCheck.size; // Return the existing count and don't import
     }
     
     // Import the JSON file
@@ -39,45 +34,57 @@ export const importQuestionsFromJSON = async (jsonFilePath: string): Promise<num
     // Convert to our model
     const questions = freeQuestions.map(convertToQuestionModel);
     
-    return await importBatchToFirestore(questions);
+    return await batchImportQuestions(questions);
   } catch (error) {
     console.error('Error importing questions:', error);
-    return 0;
+    throw error;
   }
 };
 
 /**
- * Batch import questions to Firestore
- * Checks for duplicates based on frontendQuestionId
+ * Efficiently import questions to Firestore using batched writes
  */
-const importBatchToFirestore = async (questions: Question[]): Promise<number> => {
+const batchImportQuestions = async (questions: Question[]): Promise<number> => {
   const questionsCol = collection(db, 'questions');
-  let importedCount = 0;
-  let duplicateCount = 0;
+  const timestamp = new Date().toISOString();
+  let totalImported = 0;
   
-  console.log(`Starting batch import of ${questions.length} questions...`);
+  console.log(`Starting batched import of ${questions.length} questions...`);
   
-  for (const question of questions) {
-    // Check if question already exists by frontendQuestionId
-    const q = query(questionsCol, where('frontendQuestionId', '==', question.frontendQuestionId));
-    const existingDocs = await getDocs(q);
+  try {
+    // Process in batches (Firestore batch limit is 500)
+    const BATCH_SIZE = 450; // Just under the 500 limit to be safe
+    const batches = Math.ceil(questions.length / BATCH_SIZE);
     
-    if (existingDocs.empty) {
-      await addDoc(questionsCol, {
-        ...question,
-        importedAt: new Date().toISOString()
-      });
-      importedCount++;
+    for (let i = 0; i < batches; i++) {
+      const batch = writeBatch(db);
+      const start = i * BATCH_SIZE;
+      const end = Math.min(start + BATCH_SIZE, questions.length);
+      const currentBatch = questions.slice(start, end);
       
-      // Log progress
-      if (importedCount % 100 === 0) {
-        console.log(`Imported ${importedCount} questions...`);
+      console.log(`Processing batch ${i + 1}/${batches} (${currentBatch.length} questions)...`);
+      
+      for (const question of currentBatch) {
+        // Use frontendQuestionId as document ID to ensure uniqueness
+        const docId = `q_${question.frontendQuestionId}`;
+        const docRef = doc(questionsCol, docId);
+        
+        batch.set(docRef, {
+          ...question,
+          importedAt: timestamp
+        });
       }
-    } else {
-      duplicateCount++;
+      
+      // Commit the batch
+      await batch.commit();
+      totalImported += currentBatch.length;
+      console.log(`Batch ${i + 1}/${batches} completed. Total progress: ${totalImported}/${questions.length}`);
     }
+    
+    console.log(`Import complete. ${totalImported} questions imported.`);
+    return totalImported;
+  } catch (error) {
+    console.error('Error in batch import:', error);
+    throw error;
   }
-  
-  console.log(`Import complete. Total questions imported: ${importedCount}, Duplicates skipped: ${duplicateCount}`);
-  return importedCount;
 }; 

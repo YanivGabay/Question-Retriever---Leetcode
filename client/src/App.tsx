@@ -51,6 +51,11 @@ function App() {
       setImportCount(count);
       setImportDone(true);
       setIsDbEmpty(false);
+      
+      // If count is returned but database wasn't empty, show different message
+      if (count > 0 && !isDbEmpty) {
+        console.log('Database already had questions, import skipped');
+      }
     } catch (err) {
       console.error('Import error:', err);
       setImportError('Error importing questions. Check the console for details.');
