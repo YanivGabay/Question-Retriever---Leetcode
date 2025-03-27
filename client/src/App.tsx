@@ -4,7 +4,8 @@ import { db } from './firebase/config';
 import { importQuestionsFromJSON } from './utils/importQuestions';
 import { 
   getRandomUnsentQuestionByDifficulty, 
-  getAllQuestions
+  getAllQuestions,
+  markQuestionAsSent
 } from './services/questionService';
 import { Question } from './models/Question';
 
@@ -17,6 +18,7 @@ import QuestionCard from './components/QuestionCard';
 import ImportPanel from './components/ImportPanel';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorMessage from './components/ErrorMessage';
+import SentQuestionsList from './components/SentQuestionsList';
 
 import './App.css';
 
@@ -54,6 +56,8 @@ function App() {
     sent: 0 
   });
 
+  const [showSentQuestions, setShowSentQuestions] = useState(false);
+
   // Check if database has questions on component mount
   useEffect(() => {
     const checkDatabase = async () => {
@@ -79,7 +83,10 @@ function App() {
   const fetchStats = async () => {
     try {
       // Get total questions
-      const allQuestions = await getAllQuestions();
+      let totalQuestions = 0;
+      getAllQuestions((questions) => {
+        totalQuestions = questions.length;
+      });
       
       // Get questions by difficulty
       const easyQuery = query(collection(db, 'questions'), where('difficulty', '==', 'Easy'));
@@ -94,7 +101,7 @@ function App() {
       ]);
       
       setStats({
-        total: allQuestions.length,
+        total: totalQuestions,
         easy: easySnapshot.size,
         medium: mediumSnapshot.size,
         hard: hardSnapshot.size,
@@ -149,26 +156,26 @@ function App() {
     if (!randomQuestion) return;
     
     try {
-      const questionRef = doc(db, 'questions', randomQuestion.id);
+      const retrievedId = await markQuestionAsSent(randomQuestion);
       
-      // Toggle the sent status instead of just setting to true
-      await updateDoc(questionRef, {
-        sent: !questionSent
-      });
-      
-      // Update local state with the toggled value
-      setQuestionSent(!questionSent);
-      
-      // Update stats to reflect the change
-      setStats(prevStats => {
-        return {
+      if (retrievedId) {
+        setQuestionSent(true);
+        
+        setStats(prevStats => ({
           ...prevStats,
-          sent: questionSent ? prevStats.sent - 1 : prevStats.sent + 1
-        };
-      });
+          sent: prevStats.sent + 1
+        }));
+      }
     } catch (error) {
-      console.error("Error updating question status:", error);
+      console.error("Error marking question as sent:", error);
     }
+  };
+
+  const handleUnsend = () => {
+    setStats(prevStats => ({
+      ...prevStats,
+      sent: Math.max(0, prevStats.sent - 1)
+    }));
   };
 
   // Different UI states based on application status
@@ -223,6 +230,20 @@ function App() {
             onGetAnother={handleGetRandomQuestion}
           />
         )}
+
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => setShowSentQuestions(!showSentQuestions)}
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            {showSentQuestions ? 'Hide Sent Questions' : 'Show Sent Questions'}
+          </button>
+        </div>
+
+        <SentQuestionsList 
+          isVisible={showSentQuestions} 
+          onUnsend={handleUnsend}
+        />
         
         <Footer />
       </div>

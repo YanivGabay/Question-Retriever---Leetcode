@@ -7,7 +7,8 @@ import {
   query, 
   where,
   DocumentData,
-  QueryDocumentSnapshot
+  QueryDocumentSnapshot,
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Question, TopicTag } from '../models/Question';
@@ -29,53 +30,56 @@ const convertDocToQuestion = (doc: QueryDocumentSnapshot<DocumentData>): Questio
 };
 
 /**
- * Get all questions
+ * Get all questions with real-time updates
  */
-export const getAllQuestions = async (): Promise<Array<Question & { id: string }>> => {
-  const snapshot = await getDocs(questionsCol);
-  return snapshot.docs.map(convertDocToQuestion);
+export const getAllQuestions = (callback: (questions: Array<Question & { id: string }>) => void) => {
+  return onSnapshot(questionsCol, (snapshot) => {
+    const questions = snapshot.docs.map(convertDocToQuestion);
+    callback(questions);
+  });
 };
 
 /**
- * Get filtered questions by difficulty
+ * Get filtered questions by difficulty with real-time updates
  */
-export const getQuestionsByDifficulty = async (difficulty: string): Promise<Array<Question & { id: string }>> => {
+export const getQuestionsByDifficulty = (difficulty: string, callback: (questions: Array<Question & { id: string }>) => void) => {
   const q = query(questionsCol, where('difficulty', '==', difficulty));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(convertDocToQuestion);
+  return onSnapshot(q, (snapshot) => {
+    const questions = snapshot.docs.map(convertDocToQuestion);
+    callback(questions);
+  });
 };
 
 /**
- * Get questions by topic tag
+ * Get questions by topic tag with real-time updates
  */
-export const getQuestionsByTopicTag = async (tagName: string): Promise<Array<Question & { id: string }>> => {
-  // This is a simplistic approach - for more complex queries involving arrays,
-  // you might need to use array-contains or create specialized indexes
+export const getQuestionsByTopicTag = (tagName: string, callback: (questions: Array<Question & { id: string }>) => void) => {
   const q = query(questionsCol);
-  const snapshot = await getDocs(q);
-  
-  return snapshot.docs
-    .map(convertDocToQuestion)
-    .filter((question: Question & { id: string }) => 
-      question.topicTags.some((tag: TopicTag) => tag.name.toLowerCase() === tagName.toLowerCase())
-    );
+  return onSnapshot(q, (snapshot) => {
+    const questions = snapshot.docs
+      .map(convertDocToQuestion)
+      .filter((question: Question & { id: string }) => 
+        question.topicTags.some((tag: TopicTag) => tag.name.toLowerCase() === tagName.toLowerCase())
+      );
+    callback(questions);
+  });
 };
 
 /**
- * Get a question by ID
+ * Get a question by ID with real-time updates
  */
-export const getQuestionById = async (id: string): Promise<(Question & { id: string }) | null> => {
+export const getQuestionById = (id: string, callback: (question: (Question & { id: string }) | null) => void) => {
   const docRef = doc(questionsCol, id);
-  const docSnap = await getDoc(docRef);
-  
-  if (docSnap.exists()) {
-    return {
-      ...docSnap.data() as Question,
-      id: docSnap.id
-    };
-  }
-  
-  return null;
+  return onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      callback({
+        ...docSnap.data() as Question,
+        id: docSnap.id
+      });
+    } else {
+      callback(null);
+    }
+  });
 };
 
 /**
