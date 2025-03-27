@@ -7,7 +7,7 @@ interface SentQuestion {
   questionId: string;
   title: string;
   difficulty: string;
-  sentAt: Date;
+  sentDate: string;
 }
 
 interface SentQuestionsListProps {
@@ -23,15 +23,23 @@ const SentQuestionsList = ({ isVisible, onUnsend }: SentQuestionsListProps) => {
   useEffect(() => {
     if (!isVisible) return;
 
-    const q = query(collection(db, 'retrievedQuestions'), orderBy('sentAt', 'desc'));
+    const q = query(collection(db, 'retrievedQuestions'), orderBy('sentDate', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const questions = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        sentAt: doc.data().sentAt?.toDate() || new Date()
-      })) as SentQuestion[];
+      const questions = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          questionId: data.questionId,
+          title: data.title,
+          difficulty: data.difficulty,
+          sentDate: data.sentDate
+        };
+      });
       
       setSentQuestions(questions);
+      setIsLoading(false);
+    }, (error) => {
+      console.error('Error in snapshot listener:', error);
       setIsLoading(false);
     });
 
@@ -78,7 +86,7 @@ const SentQuestionsList = ({ isVisible, onUnsend }: SentQuestionsListProps) => {
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-sm text-gray-500">
-                  {question.sentAt.toLocaleDateString()}
+                  {new Date(question.sentDate).toLocaleDateString()}
                 </span>
                 <button
                   onClick={() => handleUnsend(question.id)}
