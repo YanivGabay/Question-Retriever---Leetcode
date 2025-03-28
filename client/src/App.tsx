@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from './firebase/config';
 import { importQuestionsFromJSON } from './utils/importQuestions';
 import { 
   getRandomUnsentQuestionByDifficulty, 
-  getAllQuestions,
-  markQuestionAsSent
+
+  markQuestionAsSent,
+  unsendQuestion,
+  isQuestionAlreadySent
 } from './services/questionService';
 import { Question } from './models/Question';
 
@@ -66,7 +68,11 @@ function App() {
         setIsDbEmpty(snapshot.size === 0);
         
         if (snapshot.size > 0) {
-          fetchStats();
+          // If we have questions, set up the real-time stats listeners
+          const cleanup = await fetchStats();
+          
+          // Clean up function will be called when component unmounts
+          return cleanup;
         }
       } catch (err) {
         console.error('Error checking database:', err);
@@ -76,39 +82,83 @@ function App() {
       }
     };
 
-    checkDatabase();
+    const cleanupFn = checkDatabase();
+    
+    // Return cleanup function
+    return () => {
+      if (cleanupFn) {
+        cleanupFn.then(cleanup => {
+          if (cleanup) cleanup();
+        });
+      }
+    };
+  }, []);
+
+  // Setup real-time listener for sent questions count
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'retrievedQuestions'), (snapshot) => {
+      setStats(prevStats => ({
+        ...prevStats,
+        sent: snapshot.size
+      }));
+    }, (error) => {
+      console.error('Error in sent questions count listener:', error);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Fetch question stats
   const fetchStats = async () => {
     try {
-      // Get total questions
-      let totalQuestions = 0;
-      getAllQuestions((questions) => {
-        totalQuestions = questions.length;
+      // Set up a real-time listener for total questions
+      const unsubscribeTotal = onSnapshot(collection(db, 'questions'), (snapshot) => {
+        setStats(prevStats => ({
+          ...prevStats,
+          total: snapshot.size
+        }));
       });
       
-      // Get questions by difficulty
-      const easyQuery = query(collection(db, 'questions'), where('difficulty', '==', 'Easy'));
-      const mediumQuery = query(collection(db, 'questions'), where('difficulty', '==', 'Medium'));
-      const hardQuery = query(collection(db, 'questions'), where('difficulty', '==', 'Hard'));
+      // Set up listeners for questions by difficulty
+      const unsubscribeEasy = onSnapshot(
+        query(collection(db, 'questions'), where('difficulty', '==', 'Easy')), 
+        (snapshot) => {
+          setStats(prevStats => ({
+            ...prevStats,
+            easy: snapshot.size
+          }));
+        }
+      );
       
-      const [easySnapshot, mediumSnapshot, hardSnapshot, sentSnapshot] = await Promise.all([
-        getDocs(easyQuery),
-        getDocs(mediumQuery),
-        getDocs(hardQuery),
-        getDocs(collection(db, 'retrievedQuestions'))
-      ]);
+      const unsubscribeMedium = onSnapshot(
+        query(collection(db, 'questions'), where('difficulty', '==', 'Medium')), 
+        (snapshot) => {
+          setStats(prevStats => ({
+            ...prevStats,
+            medium: snapshot.size
+          }));
+        }
+      );
       
-      setStats({
-        total: totalQuestions,
-        easy: easySnapshot.size,
-        medium: mediumSnapshot.size,
-        hard: hardSnapshot.size,
-        sent: sentSnapshot.size
-      });
+      const unsubscribeHard = onSnapshot(
+        query(collection(db, 'questions'), where('difficulty', '==', 'Hard')), 
+        (snapshot) => {
+          setStats(prevStats => ({
+            ...prevStats,
+            hard: snapshot.size
+          }));
+        }
+      );
+      
+      // Clean up listeners when component unmounts
+      return () => {
+        unsubscribeTotal();
+        unsubscribeEasy();
+        unsubscribeMedium();
+        unsubscribeHard();
+      };
     } catch (err) {
-      console.error('Error fetching stats:', err);
+      console.error('Error setting up stat listeners:', err);
     }
   };
 
@@ -135,14 +185,18 @@ function App() {
   const handleGetRandomQuestion = async () => {
     setIsRetrieving(true);
     setRetrievalError(null);
-    setQuestionSent(false);
     setRandomQuestion(null);
     
     try {
       const question = await getRandomUnsentQuestionByDifficulty(selectedDifficulty);
       setRandomQuestion(question);
+      
       if (!question) {
         setRetrievalError(`No more unsent ${selectedDifficulty} questions available!`);
+      } else {
+        // Check if question is already sent to set the correct UI state
+        const { isSent } = await isQuestionAlreadySent(question.id);
+        setQuestionSent(isSent);
       }
     } catch (err) {
       console.error('Error retrieving question:', err);
@@ -156,18 +210,33 @@ function App() {
     if (!randomQuestion) return;
     
     try {
-      const retrievedId = await markQuestionAsSent(randomQuestion);
-      
-      if (retrievedId) {
-        setQuestionSent(true);
+      if (questionSent) {
+        // If currently marked as sent, unsend it
+        setIsRetrieving(true); // Show loading state
+        const success = await unsendQuestion(randomQuestion.id);
         
-        setStats(prevStats => ({
-          ...prevStats,
-          sent: prevStats.sent + 1
-        }));
+        if (success) {
+          console.log(`Successfully unmarked question "${randomQuestion.title}" as sent`);
+          setQuestionSent(false);
+        } else {
+          console.error("Failed to unsend question. It may have already been unsent by another user.");
+        }
+      } else {
+        // If not sent, mark it as sent
+        setIsRetrieving(true); // Show loading state
+        const retrievedId = await markQuestionAsSent(randomQuestion);
+        
+        if (retrievedId) {
+          console.log(`Successfully marked question "${randomQuestion.title}" as sent`);
+          setQuestionSent(true);
+        } else {
+          console.error("Failed to mark question as sent");
+        }
       }
     } catch (error) {
-      console.error("Error marking question as sent:", error);
+      console.error("Error toggling question sent status:", error);
+    } finally {
+      setIsRetrieving(false); // Hide loading state
     }
   };
 

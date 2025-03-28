@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { unsendQuestion } from '../services/questionService';
 
 interface SentQuestion {
   id: string;
@@ -46,11 +47,16 @@ const SentQuestionsList = ({ isVisible, onUnsend }: SentQuestionsListProps) => {
     return () => unsubscribe();
   }, [isVisible]);
 
-  const handleUnsend = async (questionId: string) => {
+  const handleUnsend = async (sentQuestionId: string, questionId: string) => {
     try {
-      setUnsendingId(questionId);
-      await deleteDoc(doc(db, 'retrievedQuestions', questionId));
-      if (onUnsend) onUnsend();
+      setUnsendingId(sentQuestionId);
+      
+      // Use the unsendQuestion service which properly handles the unsend operation
+      const success = await unsendQuestion(questionId);
+      
+      if (success && onUnsend) {
+        onUnsend();
+      }
     } catch (error) {
       console.error('Error unsending question:', error);
     } finally {
@@ -89,7 +95,7 @@ const SentQuestionsList = ({ isVisible, onUnsend }: SentQuestionsListProps) => {
                   {new Date(question.sentDate).toLocaleDateString()}
                 </span>
                 <button
-                  onClick={() => handleUnsend(question.id)}
+                  onClick={() => handleUnsend(question.id, question.questionId)}
                   disabled={unsendingId === question.id}
                   className={`px-3 py-1 text-sm rounded ${
                     unsendingId === question.id

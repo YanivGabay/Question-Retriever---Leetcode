@@ -1,14 +1,14 @@
 import { 
   collection, 
   doc, 
- 
   getDocs, 
   addDoc, 
   query, 
   where,
   DocumentData,
   QueryDocumentSnapshot,
-  onSnapshot
+  onSnapshot,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Question, TopicTag } from '../models/Question';
@@ -106,9 +106,11 @@ export const getRandomUnsentQuestionByDifficulty = async (difficulty: string): P
       (question: Question & { id: string }) => !sentQuestionIds.includes(question.id)
     );
     
+    // If all questions have been sent, get a random one from all questions
     if (availableQuestions.length === 0) {
-      console.log(`All ${difficulty} questions have already been sent!`);
-      return null;
+      console.log(`All ${difficulty} questions have already been sent. Selecting from all of them.`);
+      const randomIndex = Math.floor(Math.random() * questionsByDifficulty.length);
+      return questionsByDifficulty[randomIndex];
     }
     
     // Step 4: Select a random question from the available ones
@@ -121,10 +123,38 @@ export const getRandomUnsentQuestionByDifficulty = async (difficulty: string): P
 };
 
 /**
+ * Check if a question has already been sent
+ */
+export const isQuestionAlreadySent = async (questionId: string): Promise<{isSent: boolean, retrievedDocId?: string}> => {
+  try {
+    const q = query(retrievedQuestionsCol, where('questionId', '==', questionId));
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      // Question was already sent, return the retrieved document ID
+      return { isSent: true, retrievedDocId: snapshot.docs[0].id };
+    }
+    
+    return { isSent: false };
+  } catch (error) {
+    console.error("Error checking if question was sent:", error);
+    return { isSent: false };
+  }
+};
+
+/**
  * Record that a question was sent to the WhatsApp group
  */
 export const markQuestionAsSent = async (question: Question & { id: string }): Promise<string | null> => {
   try {
+    // First check if this question has already been sent
+    const { isSent, retrievedDocId } = await isQuestionAlreadySent(question.id);
+    
+    if (isSent && retrievedDocId) {
+      console.log(`Question "${question.title}" was already marked as sent with ID: ${retrievedDocId}`);
+      return retrievedDocId;
+    }
+    
     // Create a record in retrievedQuestions collection using the helper function
     const retrievedQuestion = createRetrievedQuestion(question);
     const retrievedDoc = await addDoc(retrievedQuestionsCol, retrievedQuestion);
@@ -134,5 +164,26 @@ export const markQuestionAsSent = async (question: Question & { id: string }): P
   } catch (error) {
     console.error("Error marking question as sent:", error);
     return null;
+  }
+};
+
+/**
+ * Unsend a question by removing it from the retrievedQuestions collection
+ */
+export const unsendQuestion = async (questionId: string): Promise<boolean> => {
+  try {
+    const { isSent, retrievedDocId } = await isQuestionAlreadySent(questionId);
+    
+    if (isSent && retrievedDocId) {
+      await deleteDoc(doc(retrievedQuestionsCol, retrievedDocId));
+      console.log(`Question with ID ${questionId} unmarked as sent`);
+      return true;
+    }
+    
+    console.log(`Question with ID ${questionId} wasn't marked as sent`);
+    return false;
+  } catch (error) {
+    console.error("Error unsending question:", error);
+    return false;
   }
 }; 

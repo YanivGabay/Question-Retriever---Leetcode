@@ -112,13 +112,14 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
             ? "bg-yellow-100 text-yellow-700 px-4 py-2 rounded-md hover:bg-yellow-200 transition font-medium text-sm"
             : "bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition font-medium text-sm"
           }
+          data-sent-status={questionSent ? 'sent' : 'unsent'}
         >
           {questionSent ? "Mark as Not Sent" : "Mark as Sent"}
         </button>
         
         <button
           onClick={onGetAnother}
-          className="bg-blue-100 text-white-700 px-4 py-2 rounded-md hover:bg-blue-200 transition text-sm font-medium"
+          className="bg-blue-100 text-blue-700 px-4 py-2 rounded-md hover:bg-blue-200 transition text-sm font-medium"
         >
           Get Another Question
         </button>
