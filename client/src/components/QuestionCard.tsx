@@ -1,5 +1,6 @@
 import React from 'react';
 import { Question } from '../models/Question';
+import CopyToClipboard from './CopyToClipboard';
 
 interface QuestionCardProps {
   question: Question & { id: string };
@@ -124,6 +125,8 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
           Get Another Question
         </button>
       </div>
+
+      <CopyToClipboard question={question} />
     </div>
   );
 };
