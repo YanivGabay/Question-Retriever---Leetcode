@@ -48,26 +48,34 @@ const CopyToClipboard: React.FC<CopyToClipboardProps> = ({ question }) => {
   };
 
   return (
-    <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-      <h4 className="text-md font-semibold text-gray-700 mb-2">Copy Shareable Message</h4>
-      <p className="text-sm text-gray-500 mb-3">
-        You can edit the message template below. Use placeholders like <code>{'{title}'}</code>, <code>{'{difficulty}'}</code>, and <code>{'{titleSlug}'}</code>.
+    <div className="mt-6 pt-4 border-t border-gray-200">
+      <h3 className="text-md font-semibold text-gray-800 mb-3 text-left">
+        Copy Shareable Message
+      </h3>
+      <p className="text-sm text-gray-500 mb-3 text-left">
+        Edit the template below. Placeholders:
+        <code>{'{title}'}</code> - the question title 
+        <code>{'{difficulty}'}</code> - the question difficulty
+        <code>{'{titleSlug}'}</code> - the question title slug     
+        
+        will be replaced automatically.
       </p>
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        className="w-full h-32 p-2 border border-gray-300 rounded-md text-sm font-mono bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        rows={5}
+        className="w-full h-48 p-3 border border-gray-300 rounded-md text-sm font-mono bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        rows={8}
+        dir="auto"
       />
       <button
         onClick={handleCopy}
-        className={`w-full mt-3 px-4 py-2 rounded-md font-medium text-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2
+        className={`w-full mt-3 px-4 py-2.5 rounded-md font-semibold text-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2
           ${isCopied
             ? 'bg-green-600 text-white focus:ring-green-500'
-            : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+            : 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500'
           }`}
       >
-        {isCopied ? 'Copied to Clipboard!' : 'Copy Message'}
+        {isCopied ? 'Copied!' : 'Copy to Clipboard'}
       </button>
     </div>
   );
